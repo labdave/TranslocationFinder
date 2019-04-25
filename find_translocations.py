@@ -142,16 +142,22 @@ def main(args):
 				"-b", args.BED_filter, "-nonamecheck"], 
 				stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
 
+		# Got error from bedtools merge about unsorted input, so sort here
+		sort_proc = subprocess.Popen(["bedtools", "sort", "-i", "-"],
+			stdin=intersect_proc.stdout, stdout=subprocess.PIPE)
+
 		# Merge the reads within leeway distance
 		with open(merged_file, "w") as out_f:
 			merge_proc = subprocess.Popen(["bedtools", "merge", "-i", "-", 
 				"-d", str(args.merge_distance), "-c", "4", "-o", "count,distinct"], 
-				stdin=intersect_proc.stdout, stdout=out_f)
+				stdin=sort_proc.stdout, stdout=out_f)
 
 			# Allow bamtobed_proc to receive a SIGPIPE if intersect_proc exits
 			bamtobed_proc.stdout.close()
-			# Allow intersect_proc to receive a SIGPIPE if merge_proc exits
+			# Allow intersect_proc to receive a SIGPIPE if sort_proc exits
 			intersect_proc.stdout.close()
+			# Allow sort_proc to receive a SIGPIPE if merge_proc exits
+			sort_proc.stdout.close()
 			# Run merge_proc
 			merge_proc.communicate()
 
@@ -160,16 +166,22 @@ def main(args):
 
 	# Otherwise just merge reads without the filtering step beforehand
 	else:
+		# Got error from bedtools merge about unsorted input, so sort here
+		sort_proc = subprocess.Popen(["bedtools", "sort", "-i", "-"],
+			stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
+
 		# Merge the reads within leeway distance
 		merged_file = os.path.join(args.out_dir, "merged_reads.bed")
 		with open(merged_file, "w") as out_f:
 			merge_proc = subprocess.Popen(["bedtools", "merge", "-i", "-", 
 				"-d", str(args.merge_distance), "-c", "4", 
 				"-o", "count,distinct"], 
-				stdin=bamtobed_proc.stdout, stdout=out_f)
+				stdin=sort_proc.stdout, stdout=out_f)
 
-			# Allow bamtobed_proc to receive a SIGPIPE if merge_proc exits
+			# Allow bamtobed_proc to receive a SIGPIPE if sort_proc exits
 			bamtobed_proc.stdout.close()
+			# Allow sort_proc to receive a SIGPIPE if merge_proc exits
+			sort_proc.stdout.close()
 			# Run merge_proc
 			merge_proc.communicate()
 
