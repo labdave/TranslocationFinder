@@ -1,5 +1,5 @@
 # Rachel Kositsky
-# 2019-04-16, 2019-04-22, 2019-04-24
+# 2019-04-16, 2019-04-22, 2019-04-24, 2019-05-10
 
 import argparse
 import pandas as pd
@@ -39,7 +39,7 @@ def main(args):
 
 	# Update these as you add more annotations
 	# TODO: change this to be read from arguments instead of defined here
-	annotation_types = ["Gene", "Promoter", "Panel_Category"]
+	annotation_types = ["Gene", "Promoter", "Panel_Category", "Literature"]
 
 	# Add empty strings for all annotation types for both breakpoint ends
 	# e.g. Gene_1, Gene_2, ...
@@ -69,8 +69,10 @@ def main(args):
 	# Intersect with all annotation BED files
 	# TODO: update command to change with annotation arguments passed in
 	cmd = ["bedtools", "intersect", "-wa", "-wb", "-a", transloc_tmp_bed, 
-		"-b", args.gene_bed, args.promoter_bed, args.panel_bed, "-names",
-		"Gene", "Promoter", "Panel_Category"]
+		"-b", args.gene_bed, args.promoter_bed, args.panel_bed, 
+		args.literature_bed, "-names"]
+	# Tack on the annotation names to the command
+	cmd = cmd + annotation_types
 
 	annot_tmp_bed = "annot.tmp.bed"
 	with open(annot_tmp_bed, "w") as out_f:
@@ -85,27 +87,36 @@ def main(args):
 	# Note: 2+ annotation files required for the columns to work out
 	with open(annot_tmp_bed, "r") as in_f:
 		for line in in_f.readlines():
-			a = BedtoolsAnnotation(line)
+			ann = BedtoolsAnnotation(line)
 			# e.g. Gene_2
-			col_name = a.annotation_category + "_" + a.location_order
+			col_name = ann.annotation_category + "_" + ann.location_order
 
-			# Add on a 
-			current_annotation = df.loc[a.df_row, col_name]
+			# Add on annotation coulmn
+			current_annotation = df.loc[ann.df_row, col_name]
 			if current_annotation:
-				df.loc[a.df_row, col_name] = current_annotation + "," + a.annotation
+				df.loc[ann.df_row, col_name] = current_annotation + "," + ann.annotation
 			else:
-				df.loc[a.df_row, col_name] = a.annotation
+				df.loc[ann.df_row, col_name] = ann.annotation
 
-	# Delete temporary files here
-	os.remove(annot_tmp_bed)
-	os.remove(transloc_tmp_bed)
 
 	######################################################
 	### Rearrange annotations into tab-delimited table ###
 	######################################################
 
+	# Move "Read" column last
+	df = df.reindex(list([a for a in df.columns if a != 'Read_Pair_IDs']) + 
+		['Read_Pair_IDs'], axis=1)
+
+	# Sort dataframe to aid readability later
+	df = df.sort_values(by=["N_Read_Pairs", "Chrom_1", "Start_1", "Chrom_2", 
+		"Start_2"], ascending=[False, True, True, True, True])
+
 	# Write out df as a tab-delimited csv
 	df.to_csv(path_or_buf=args.out_tsv, sep="\t", index=False)
+
+	# Delete temporary files
+	os.remove(annot_tmp_bed)
+	os.remove(transloc_tmp_bed)
 
 
 def parse_args(args=None):
@@ -126,7 +137,10 @@ def parse_args(args=None):
 		help="BED file of promoter regions (2000 bp upstream of gene body), annotated with gene names")
 
 	parser.add_argument("panel_bed", 
-		help="BED file with category annotations (MYC, BCL2, BCL6,..)")
+		help="BED file with category annotations (e.g. MYC-rearrangement)")
+
+	parser.add_argument("literature_bed",
+		help="BED file with literature-derived regions")
 
 	# TODO: figure out some way to get a variable length list of pairs of names
 	# and of BED file locations
