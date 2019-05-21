@@ -22,9 +22,13 @@ RUN pip install numpy scipy pandas pybedtools pysam
 # make directory to store tools such as QCParser
 RUN mkdir tools
 
-# get the QCParser from GitHub
-RUN git clone --branch master https://github.com/labdave/TranslocationFinder.git /tools/TranslocationFinder
+# get the TranslocationFinder from GitHub
+RUN git clone --branch master https://github.com/labdave/TranslocationFinder.git
 
-ENV PATH /tools/TranslocationFinder:$PATH
+ENV PATH /TranslocationFinder:$PATH
 
-CMD ["python", ""]
+# change the permission of the repo
+RUN chmod -R 777 /TranslocationFinder
+
+# make the wrapper script as default script to execute
+CMD ["python", "translocation.py"]
