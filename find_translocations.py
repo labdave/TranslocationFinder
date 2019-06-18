@@ -189,20 +189,35 @@ def main(args):
 	## Go through merged lines and compare R2s ##
 	#############################################
 
-	# Chronological ordering of reference contigs	
-	ref_order = list(map(str, range(1, 23))) + ["X", "Y", "M"]
-	ref_key = lambda ref: ref_order.index(ref[3:])
+	# Parse in reference conting (chromosome) ordering from user-defined file
+	ref_order = []
+
+	with open(args.chromosome_list, "r") as in_f:
+		for line in in_f.readlines():
+			chroms = line.strip().split("\t")
+			if len(chroms) == 0:
+				raise Exception("No chromosome listed/empty line in chromosome file")
+			elif len(chroms) == 1:
+				ref_order.append(chroms[0])
+			elif len(chroms) == 2:
+				if chroms[0] == chroms[1]:
+					ref_order.append(chroms[0])
+				else:
+					ref_order += chroms
+	ref_key = lambda ref: ref_order.index(ref)
 
 	bamfile = pysam.AlignmentFile(args.discordant_reads_bam, "rb")
 	tranlocation_file = os.path.join(args.out_dir, "translocations.tsv")
 	n_merged = 0
 	n_written = 0
+
 	with open(merged_file, "r") as in_f, open(tranlocation_file, "w") as out_f:
 		# Write header for translocation output
 		out_f.write("\t".join(["Chrom_1", "Start_1", "End_1",
 			"Chrom_2", "Start_2", "End_2", "N_Read_Pairs", "Read_Pair_IDs"]))
 		out_f.write("\n")
 
+		# Loop through merged lines that are possible translocation locations
 		for line in in_f.readlines():
 			n_merged += 1
 
@@ -216,10 +231,14 @@ def main(args):
 			# List of all translocations for this potential translocation start
 			translocation_list = []
 
-			# Get locations of mate pairs
-			# TODO: also include chimeric reads/supplementary alignments
+			## Get locations of mate pairs ##
+			# TODO: include chimeric reads/supplementary alignments
+			n_mates = 0
 			for read in bamfile.fetch(loc1.chrom, loc1.start, loc1.end):
 				# Skipping over check here for read ID being part of region
+
+				# Keep track of number reads in that region lining up
+				n_mates += 1
 
 				# Get paired read of the one in the original pileup
 				try:
@@ -227,29 +246,29 @@ def main(args):
 				except ValueError:
 					continue
 
-				# Filter on mapping quality (should be superfluous, but doing it
-				# anyway)
+				# Filter on mapping quality
 				if mate.mapq < args.min_mapping_quality: continue
 
 				mate_ref = mate.reference_name
 				read_ref = read.reference_name
 
 				# Only consider translocations with known chromosomes
-				if mate_ref[3:] not in ref_order: continue
+				if mate_ref not in ref_order: continue
 
-				# If BED file not provided, only consider translocations for chromosomes ahead of you
+				# If BED file not provided, only consider translocations for 
+				# chromosomes ahead of you
 				if args.BED_filter == None:
 					if ref_key(mate_ref) <= ref_key(read_ref): continue
-				# If BED file provided, do inter-chromosomal everybody, but
+				# If BED file provided, do inter-chromosomal for everybody, but
 				# for BED file mates, only consider translocations for 
-				# chromosomes ahead of you
+				# chromosomes ahead of you so that you don't double count 
+				# translocations
 				else:
 					# We only capture inter-chromosomal breakpoints here; 
 					# ignore any read pairs on the same chromosome
 					if mate_ref == read_ref:
 						continue
 					else:
-
 						# If it's in the BED target file, go back to WGS rules;
 						# only keep if it's in a larger chromosome to not 
 						# double-print
@@ -260,7 +279,8 @@ def main(args):
 						if bed_filter_file.any_hits(mate_interval):
 							if ref_key(mate_ref) <= ref_key(read_ref): continue
 
-				# We want to use this read pair; add a translocation
+				## Add a translocation ##
+				# If we got this far, we want to use this read pair
 				# Try to add the mate to an existing translocation
 				for t in translocation_list:
 					if t.near(mate, args.merge_distance):
@@ -270,6 +290,13 @@ def main(args):
 				else:
 					t = Translocation(read, mate)
 					translocation_list.append(t)
+
+			# Check that number of reads you trawled for mates matches bedtools
+			# output
+			if n_mates != loc1.n_reads:
+				raise Exception("Reads fetched in region different from merged "
+					"number of reads: merged {0}, but fetched {1}".format(
+						loc1.n_reads, n_mates))
 				
 			# Sort translocation list by chromosome, then by starting position
 			translocation_list = sorted(translocation_list, 
@@ -283,7 +310,10 @@ def main(args):
 					out_f.write(t.get_output_line())
 					n_written += 1
 
+			print("Processed {0} merged lines".format(n_merged))
+
 	bamfile.close()
+	print("----------------------")
 	print("Processed {0} merged lines".format(n_merged))
 	print("Found {0} translocations, and wrote them at {1}".format(n_written,
 		tranlocation_file))
@@ -317,6 +347,9 @@ def parse_args(args=None):
 
 	parser.add_argument("-Q", "--min_mapping_quality", default=30, type=int,
 		help="Minimum mapping quality for any supporting reads (default 30)")
+
+	parser.add_argument("-C", "--chromosome_list", 
+		help="File with chromosome mapping names, in order")
 
 	results = parser.parse_args(args)
 
