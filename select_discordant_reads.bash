@@ -16,6 +16,6 @@ fi
 input=$1
 output=$2
 
- samtools view -b -@ 4 -f 1 -F 1038 -q 30 -o ${output} ${input}
+samtools view -b -@ 4 -f 1 -F 1038 -q 30 -o ${output} ${input}
 
- samtools index ${output}
+samtools index ${output}

@@ -17,13 +17,13 @@ Linux applications:
 
 ## Running
 
-1) Run select_discordant_reads.bash to get a BAM file and index with only discordant reads.
+Running Main.py runs the following scripts:
 
-2) Run find_translocations.py to output a table with all translocations supported by the discordant reads provided.
+1) select_discordant_reads.bash: get a BAM file and index with only discordant reads
+2) find_translocations.py: output a table with all translocations supported by the discordant reads provided
+3) annotate_translocations.py: annotate translocations found with annotation regions
 
-3) Run annotate_translocations.py with annotation regions to annotate the translocations found.
-
-Annotation regions are provided by BED files. Current annotations are gene-level, promoter-level, and category-level. 
+Annotation regions are provided by BED files. Current annotations are gene-level, promoter-level, category-level, and literature-derived.
 Empty files can be provided if no annotation is desired for one of the categories.
 
 ## Authors

@@ -1,4 +1,4 @@
-# Identify translocations given discordant reads, optionally filtering by a BED 
+# Identify translocations given discordant reads, optionally filtering by a BED
 # with target regions
 #
 # Rachel Kositsky
@@ -24,7 +24,7 @@ class Translocation(object):
 					necessarily read2
 		"""
 
-		# Location 1 is set from initial read that lends its support; 
+		# Location 1 is set from initial read that lends its support;
 		# expand when another supporting read is nearby
 		self.chrom_1 = read_1.reference_name
 		self.start_1 = read_1.reference_start
@@ -102,24 +102,69 @@ class MergedLocation(object):
 		self.n_reads = int(fields[3])
 		self.read_ids = fields[4]
 
+	def __str__(self):
+		return "{0}:{1}-{2}".format(self.chrom, self.start, self.end)
 
-def main(args):
-	"""Identify translocations given discordant reads,
-	optionally filtering by a BED with target region of one end
 
-	Approach: use bedtools merge to get pile ups of reads in one location,
-	then filter through the pile ups to see if you get any with pile ups in 
-	the second location.
+def setup(out_dir, discordant_reads_bam):
+	"""Set up for find_translocations
 
-	Writes two files in output directory:
-	- merged_reads.bed: intermedite file with merged discordant reads
-	- translocations.tsv: output file with translocations
+	Args:
+		out_dir: output directory
+		discordant_reads_bam: input BAM file as a pysam object
+	Returns:
+		start_time: the starting time of the program
+		ref_order: a list of chromosomes in reference order
+		ref_key: function to get the order of a given chromosome
 	"""
 	start_time = time.time()
 
 	# Create output directory if it does not exist
-	if not os.path.exists(args.out_dir):
-		os.mkdir(args.out_dir)
+	if not os.path.exists(out_dir):
+		os.mkdir(out_dir)
+
+	# Parse in reference contigs (chromosome) ordering from input BAM file
+	header_dict = discordant_reads_bam.header.as_dict()
+	ref_order = []
+
+	for sequence in header_dict["SQ"]:
+		ref_order.append(sequence["SN"])
+
+	ref_key = lambda ref: ref_order.index(ref)
+
+	return (start_time, ref_order, ref_key)
+
+
+def find_translocations(discordant_reads_bam, out_dir,
+	BED_filter=None, merge_distance=1000, min_read_pairs=2,
+	min_mapping_quality=30):
+	"""Identify translocations given discordant reads,
+	optionally filtering by a BED with target region of one end.
+
+	How: use bedtools merge to get pile ups of reads in one location,
+	then filter through the pile ups to see if you get any with pile ups in 
+	the second location.
+
+	Args:
+	  discordant_reads_bam: BAM file with discordant reads
+	  out_dir: Output directory
+	  BED_filter: BED file on which to filter
+	  merge_distance: Maximum distance between reads for which they're still
+	    considered part of the same translocation
+	  min_read_pairs: Minimum supporting reads for a translocation to be called
+	  min_mapping_quality: Minimum mapping quality for any supporting reads
+	Returns: None
+	Writes in output directory:
+	  merged_reads.bed: intermedite file with merged discordant reads
+	  translocations.tsv: output file with translocations
+	"""
+
+	###########
+	## Setup ##
+	###########
+
+	bamfile = pysam.AlignmentFile(discordant_reads_bam, "rb")
+	(start_time, ref_order, ref_key) = setup(out_dir, bamfile)
 
 	###############################################
 	## Pile up reads to get first breakpoint end ##
@@ -128,18 +173,18 @@ def main(args):
 	# Use bedtools merge
 	# Issue: can't merge the mates along with the original guys.
 	# Workaround: just use this for merging R1s, then filter later on R2s
-	merged_file = os.path.join(args.out_dir, "merged_reads.bed")
+	merged_file = os.path.join(out_dir, "merged_reads.bed")
 
 	# Convert BAM to BED
 	bamtobed_proc = subprocess.Popen(["bedtools", "bamtobed", 
-		"-i", args.discordant_reads_bam], stdout=subprocess.PIPE)
+		"-i", discordant_reads_bam], stdout=subprocess.PIPE)
 
 	# If a BED target file was specified, filter the reads before merging
-	if args.BED_filter:
+	if BED_filter:
 		# Filter using intersect
 		# run with -nonamecheck to avoid a warning from GL000216.2 chromosome
 		intersect_proc = subprocess.Popen(["bedtools", "intersect", "-a", "-", 
-				"-b", args.BED_filter, "-nonamecheck"], 
+				"-b", BED_filter, "-nonamecheck"],
 				stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
 
 		# Got error from bedtools merge about unsorted input, so sort here
@@ -149,7 +194,7 @@ def main(args):
 		# Merge the reads within leeway distance
 		with open(merged_file, "w") as out_f:
 			merge_proc = subprocess.Popen(["bedtools", "merge", "-i", "-", 
-				"-d", str(args.merge_distance), "-c", "4", "-o", "count,distinct"], 
+				"-d", str(merge_distance), "-c", "4", "-o", "count,distinct"],
 				stdin=sort_proc.stdout, stdout=out_f)
 
 			# Allow bamtobed_proc to receive a SIGPIPE if intersect_proc exits
@@ -162,7 +207,7 @@ def main(args):
 			merge_proc.communicate()
 
 		# Set up pybedtools for later
-		bed_filter_file = pybedtools.BedTool(args.BED_filter)
+		bed_filter_file = pybedtools.BedTool(BED_filter)
 
 	# Otherwise just merge reads without the filtering step beforehand
 	else:
@@ -171,10 +216,10 @@ def main(args):
 			stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
 
 		# Merge the reads within leeway distance
-		merged_file = os.path.join(args.out_dir, "merged_reads.bed")
+		merged_file = os.path.join(out_dir, "merged_reads.bed")
 		with open(merged_file, "w") as out_f:
 			merge_proc = subprocess.Popen(["bedtools", "merge", "-i", "-", 
-				"-d", str(args.merge_distance), "-c", "4", 
+				"-d", str(merge_distance), "-c", "4",
 				"-o", "count,distinct"], 
 				stdin=sort_proc.stdout, stdout=out_f)
 
@@ -189,25 +234,8 @@ def main(args):
 	## Go through merged lines and compare R2s ##
 	#############################################
 
-	# Parse in reference conting (chromosome) ordering from user-defined file
-	ref_order = []
-
-	with open(args.chromosome_list, "r") as in_f:
-		for line in in_f.readlines():
-			chroms = line.strip().split("\t")
-			if len(chroms) == 0:
-				raise Exception("No chromosome listed/empty line in chromosome file")
-			elif len(chroms) == 1:
-				ref_order.append(chroms[0])
-			elif len(chroms) == 2:
-				if chroms[0] == chroms[1]:
-					ref_order.append(chroms[0])
-				else:
-					ref_order += chroms
-	ref_key = lambda ref: ref_order.index(ref)
-
-	bamfile = pysam.AlignmentFile(args.discordant_reads_bam, "rb")
-	tranlocation_file = os.path.join(args.out_dir, "translocations.tsv")
+	bamfile = pysam.AlignmentFile(discordant_reads_bam, "rb")
+	tranlocation_file = os.path.join(out_dir, "translocations.tsv")
 	n_merged = 0
 	n_written = 0
 
@@ -225,7 +253,7 @@ def main(args):
 			loc1 = MergedLocation(line)
 
 			# Skip over if not enough read support in first location
-			if loc1.n_reads < args.min_read_pairs:
+			if loc1.n_reads < min_read_pairs:
 				continue
 
 			# List of all translocations for this potential translocation start
@@ -247,7 +275,7 @@ def main(args):
 					continue
 
 				# Filter on mapping quality
-				if mate.mapq < args.min_mapping_quality: continue
+				if mate.mapq < min_mapping_quality: continue
 
 				mate_ref = mate.reference_name
 				read_ref = read.reference_name
@@ -257,11 +285,11 @@ def main(args):
 
 				# If BED file not provided, only consider translocations for 
 				# chromosomes ahead of you
-				if args.BED_filter == None:
+				if BED_filter == None:
 					if ref_key(mate_ref) <= ref_key(read_ref): continue
 				# If BED file provided, do inter-chromosomal for everybody, but
-				# for BED file mates, only consider translocations for 
-				# chromosomes ahead of you so that you don't double count 
+				# for BED file mates, only consider translocations for
+				# chromosomes ahead of you so that you don't double count
 				# translocations
 				else:
 					# We only capture inter-chromosomal breakpoints here; 
@@ -283,7 +311,7 @@ def main(args):
 				# If we got this far, we want to use this read pair
 				# Try to add the mate to an existing translocation
 				for t in translocation_list:
-					if t.near(mate, args.merge_distance):
+					if t.near(mate, merge_distance):
 						t.add_read_pair(read, mate)
 						break
 				# If no translocation fits, then make a new one
@@ -295,8 +323,8 @@ def main(args):
 			# output
 			if n_mates != loc1.n_reads:
 				raise Exception("Reads fetched in region different from merged "
-					"number of reads: merged {0}, but fetched {1}".format(
-						loc1.n_reads, n_mates))
+					"number of reads: merged {0}, but fetched {1} in region "
+					"{2}".format(loc1.n_reads, n_mates, loc1))
 				
 			# Sort translocation list by chromosome, then by starting position
 			translocation_list = sorted(translocation_list, 
@@ -306,11 +334,9 @@ def main(args):
 
 			# Write any translocations which have enough reads
 			for t in translocation_list:
-				if t.n_read_pairs >= args.min_read_pairs:
+				if t.n_read_pairs >= min_read_pairs:
 					out_f.write(t.get_output_line())
 					n_written += 1
-
-			print("Processed {0} merged lines".format(n_merged))
 
 	bamfile.close()
 	print("----------------------")
@@ -326,7 +352,7 @@ def main(args):
 def parse_args(args=None):
 	"""Parse command line arguments"""
 	parser = argparse.ArgumentParser(
-		description="Compile WHO capture panel component BED files into one merged file and output a table with all sizes")
+		description="Identify translocations given discordant reads")
 
 	parser.add_argument("discordant_reads_bam",
 		help="BAM file with discordant reads")
@@ -348,13 +374,12 @@ def parse_args(args=None):
 	parser.add_argument("-Q", "--min_mapping_quality", default=30, type=int,
 		help="Minimum mapping quality for any supporting reads (default 30)")
 
-	parser.add_argument("-C", "--chromosome_list", 
-		help="File with chromosome mapping names, in order")
-
 	results = parser.parse_args(args)
 
 	return results
 
 
 if __name__ == '__main__':
-    main(parse_args(sys.argv[1:]))
+	a = parse_args(sys.argv[1:])
+	find_translocations(a.discordant_reads_bam, a.out_dir, a.chromosome_list,
+		a.BED_filter, a.merge_distance, a.min_read_pairs, a.min_mapping_quality)

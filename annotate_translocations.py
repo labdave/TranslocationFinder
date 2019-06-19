@@ -1,5 +1,5 @@
 # Rachel Kositsky
-# 2019-04-16, 2019-04-22, 2019-04-24, 2019-05-10
+# 2019-04-16, 2019-04-22, 2019-04-24, 2019-05-10, 2019-06-19
 
 import argparse
 import pandas as pd
@@ -28,14 +28,27 @@ class BedtoolsAnnotation(object):
 		self.annotation = fields[8]
 
 
-def main(args):
-	"""Produce annotated translocation table"""
+def annotate_translocations(translocation_tsv, out_tsv, gene_bed, promoter_bed,
+	panel_bed, literature_bed):
+	"""Produce annotated translocation table
+
+	Args:
+		translocation_tsv: Input file with tab-separated translocation coordinates
+		out_tsv: Output file path for annotated translocations
+		gene_bed: BED file of gene body regions, annotated with gene names
+		promoter_bed: BED file of promoter regions (2000 bp upstream of gene
+			body), annotated with gene names
+		panel_bed: BED file with category annotations (e.g. MYC-rearrangement
+		literature_bed: BED file with literature-derived regions
+	Returns: None
+	Writes: table at out_tsv
+	"""
 
 	####################################################################
 	### Read in translocation coordinates and initialize annotations ###
 	####################################################################
 
-	df = pd.read_csv(args.translocation_tsv, sep="\t", header=0)
+	df = pd.read_csv(translocation_tsv, sep="\t", header=0)
 
 	# Update these as you add more annotations
 	# TODO: change this to be read from arguments instead of defined here
@@ -69,8 +82,8 @@ def main(args):
 	# Intersect with all annotation BED files
 	# TODO: update command to change with annotation arguments passed in
 	cmd = ["bedtools", "intersect", "-wa", "-wb", "-a", transloc_tmp_bed, 
-		"-b", args.gene_bed, args.promoter_bed, args.panel_bed, 
-		args.literature_bed, "-names"]
+		"-b", gene_bed, promoter_bed, panel_bed,
+		literature_bed, "-names"]
 	# Tack on the annotation names to the command
 	cmd = cmd + annotation_types
 
@@ -98,7 +111,6 @@ def main(args):
 			else:
 				df.loc[ann.df_row, col_name] = ann.annotation
 
-
 	######################################################
 	### Rearrange annotations into tab-delimited table ###
 	######################################################
@@ -112,7 +124,7 @@ def main(args):
 		"Start_2"], ascending=[False, True, True, True, True])
 
 	# Write out df as a tab-delimited csv
-	df.to_csv(path_or_buf=args.out_tsv, sep="\t", index=False)
+	df.to_csv(path_or_buf=out_tsv, sep="\t", index=False)
 
 	# Delete temporary files
 	os.remove(annot_tmp_bed)
@@ -152,4 +164,6 @@ def parse_args(args=None):
 
 
 if __name__ == '__main__':
-    main(parse_args(sys.argv[1:]))
+	args = parse_args(sys.argv[1:])
+	annotate_translocations(args.translocation_tsv, args.out_tsv, args.gene_bed,
+		args.promoter_bed, args.panel_bed, args.literature_bed)
