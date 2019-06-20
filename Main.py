@@ -20,27 +20,31 @@ def define_defaults(dir_path, args):
 	Returns:
 		chromosome_list: sorted chromosome names (GENCODE default)
 		BED_filter: BED genomic region file for where to call translocations
+		gene_bed: BED file of gene body regions, annotated with gene names
+		promoter_bed: BED file of promoter regions (2000 bp upstream of gene
+			body), annotated with gene names
+		target_bed: BED file with annotations from target panel (e.g. MYC-exon1)
+		literature_bed: BED file with literature-derived regions
 	"""
-	
-	# # Use GENCODE chromosome names by default.
-	# if args.chromosome_list:
-	# 	chromosome_list = args.chromosome_list
-	# else:
-	# 	chromosome_list = os.path.join(dir_path, "resources", 
-	# 		"GRCh38_gencode.txt")
 
 	# If BED file given, use that, otherwise use literature BED file as default.
 	# -1 means no filtering.
+	r_dir = os.path.join(dir_path, "resources")
+
 	if args.BED_filter:
 		if args.BED_filter == "-1":
 			BED_filter = None
 		else:
 			BED_filter = args.BED_filter
 	else:
-		BED_filter = os.path.join(dir_path, "resources", 
-			"both_panels_MYC_BCL2_BCL6.bed")
+		BED_filter = os.path.join(r_dir, "both_panels_MYC_BCL2_BCL6.bed")
 
-	return BED_filter
+	gene_bed = args.gene_bed if args.gene_bed else os.path.join(r_dir, "genes.bed")
+	promoter_bed = args.promoter_bed if args.promoter_bed else os.path.join(r_dir, "promoters.bed")
+	target_bed = args.target_bed if args.target_bed else os.path.join(r_dir, "panel.gencode.bed")
+	literature_bed = args.literature_bed if args.literature_bed else os.path.join(r_dir, "literature.bed")
+
+	return (BED_filter, gene_bed, promoter_bed, target_bed, literature_bed)
 
 
 def main(args):
@@ -52,6 +56,10 @@ def main(args):
 	if not os.path.exists(out_dir):
 		os.mkdir(out_dir)
 
+	# Parse arguments and fill in defaults if needed
+	(BED_filter, gene_bed, promoter_bed,
+		target_bed, literature_bed) = define_defaults(dir_path, args)
+
 	# Call select_discordant_reads. Its output BAM file will be written in the
 	# output directory.
 	print("Extracting discordant reads...")
@@ -61,21 +69,15 @@ def main(args):
 
 	# Call find_translocations.
 	print("Finding translocations...")
-	BED_filter = define_defaults(dir_path, args)
 	find_translocations.find_translocations(out_bam, out_dir, 
 		BED_filter, args.merge_distance, args.min_read_pairs, 
 		args.min_mapping_quality)
 
-	# Call annotation file. Use files from resources/.
+	# Call annotation file. Use files from resources/ defined earlier.
 	print("Annotating translocations...")
 	translocation_tsv = os.path.join(out_dir, "translocations.tsv")
-	gene_bed = os.path.join(dir_path, "resources", "genes.bed")
-	promoter_bed = os.path.join(dir_path, "resources", "promoters.bed")
-	panel_bed = os.path.join(dir_path, "resources", "panel.gencode.bed")
-	literature_bed = os.path.join(dir_path, "resources", "literature.bed")
-
 	annotate_translocations.annotate_translocations(translocation_tsv,
-		args.out_path, gene_bed, promoter_bed, panel_bed, literature_bed)
+		args.out_path, gene_bed, promoter_bed, target_bed, literature_bed)
 
 	print("Done!")
 
@@ -91,21 +93,34 @@ def parse_args(args=None):
 	parser.add_argument("out_path",
 		help="Path to output table with annotated translocations")
 
-	parser.add_argument("-B", "--BED_filter", type=str,
+	parser.add_argument("--BED_filter", type=str,
 		help="BED file where translocations can be called, or -1 for no "
 		"filtering. Default: MYC, BCL2, BCL6, and other genes.",
 		default=None)
 
-	parser.add_argument("-D", "--merge_distance", default=1000, type=int,
+	parser.add_argument("--merge_distance", default=1000, type=int,
 		help="Maximum distance between reads where they're still considered"
 		" part of the same translocation. Default: 1000 bp")
 
-	parser.add_argument("-R", "--min_read_pairs", default=2, type=int,
+	parser.add_argument("--min_read_pairs", default=2, type=int,
 		help="Minimum supporting reads for a translocation to be called"
 		" . Default: 2 read pairs")
 
-	parser.add_argument("-Q", "--min_mapping_quality", default=30, type=int,
+	parser.add_argument("--min_mapping_quality", default=30, type=int,
 		help="Minimum mapping quality for supporting reads. Default: MQ >= 30")
+
+	parser.add_argument("--gene_bed",
+		help="BED file of gene body regions, annotated with gene names")
+
+	parser.add_argument("--promoter_bed",
+		help="BED file of promoter regions (2000 bp upstream of gene body), "
+		"annotated with gene names")
+
+	parser.add_argument("--target_bed",
+		help="BED file with annotations from target panel (e.g. MYC-exon1)")
+
+	parser.add_argument("--literature_bed",
+		help="BED file with literature-derived regions")
 
 	results = parser.parse_args(args)
 

@@ -29,7 +29,7 @@ class BedtoolsAnnotation(object):
 
 
 def annotate_translocations(translocation_tsv, out_tsv, gene_bed, promoter_bed,
-	panel_bed, literature_bed):
+	target_bed, literature_bed):
 	"""Produce annotated translocation table
 
 	Args:
@@ -38,7 +38,7 @@ def annotate_translocations(translocation_tsv, out_tsv, gene_bed, promoter_bed,
 		gene_bed: BED file of gene body regions, annotated with gene names
 		promoter_bed: BED file of promoter regions (2000 bp upstream of gene
 			body), annotated with gene names
-		panel_bed: BED file with category annotations (e.g. MYC-rearrangement
+		target_bed: BED file with annotations from target panel (e.g. MYC-exon1)
 		literature_bed: BED file with literature-derived regions
 	Returns: None
 	Writes: table at out_tsv
@@ -52,7 +52,7 @@ def annotate_translocations(translocation_tsv, out_tsv, gene_bed, promoter_bed,
 
 	# Update these as you add more annotations
 	# TODO: change this to be read from arguments instead of defined here
-	annotation_types = ["Gene", "Promoter", "Panel_Category", "Literature"]
+	annotation_types = ["Gene", "Promoter", "Target_Category", "Literature"]
 
 	# Add empty strings for all annotation types for both breakpoint ends
 	# e.g. Gene_1, Gene_2, ...
@@ -80,7 +80,7 @@ def annotate_translocations(translocation_tsv, out_tsv, gene_bed, promoter_bed,
 	# Intersect with all annotation BED files
 	# TODO: update command to change with annotation arguments passed in
 	cmd = ["bedtools", "intersect", "-wa", "-wb", "-nonamecheck", 
-		"-a", transloc_tmp_bed, "-b", gene_bed, promoter_bed, panel_bed,
+		"-a", transloc_tmp_bed, "-b", gene_bed, promoter_bed, target_bed,
 		literature_bed, "-names"]
 	# Tack on the annotation names to the command
 	cmd = cmd + annotation_types
@@ -144,10 +144,11 @@ def parse_args(args=None):
 		help="BED file of gene body regions, annotated with gene names")
 
 	parser.add_argument("promoter_bed", 
-		help="BED file of promoter regions (2000 bp upstream of gene body), annotated with gene names")
+		help="BED file of promoter regions (2000 bp upstream of gene body), "
+		"annotated with gene names")
 
-	parser.add_argument("panel_bed", 
-		help="BED file with category annotations (e.g. MYC-rearrangement)")
+	parser.add_argument("target_bed",
+		help="BED file with annotations from target panel (e.g. MYC-exon1)")
 
 	parser.add_argument("literature_bed",
 		help="BED file with literature-derived regions")
@@ -164,4 +165,4 @@ def parse_args(args=None):
 if __name__ == '__main__':
 	args = parse_args(sys.argv[1:])
 	annotate_translocations(args.translocation_tsv, args.out_tsv, args.gene_bed,
-		args.promoter_bed, args.panel_bed, args.literature_bed)
+		args.promoter_bed, args.target_bed, args.literature_bed)
