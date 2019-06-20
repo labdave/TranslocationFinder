@@ -5,10 +5,12 @@ Scripts to find translocations using discordant reads from short-read sequencing
 
 ## Requirements
 
+Requires Python >3.5.
+
 Python packages:
-* pandas
-* pybedtools
-* pysam
+* pandas 0.24.2
+* pybedtools 0.8.0
+* pysam 0.15.2
 
 Linux applications:
 * libz-dev (for compiling pybedtools)
