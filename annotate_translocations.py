@@ -68,21 +68,19 @@ def annotate_translocations(translocation_tsv, out_tsv, gene_bed, promoter_bed,
 	# Make a temporary BED file for intersection with annotation files
 	transloc_tmp_bed = "transloc.tmp.bed"
 	with open(transloc_tmp_bed, "w") as out_f:
-		# Separate out each breakpoint on its own line
-		for i in range(df.shape[0]):
-			# Write location 1 (0:3) and location 2 (3:6)
-			# yes, it's mixing 0-based and 1-based counting; we need it for 
-			# human readability later
-			for j in range(1,3):
-				coords = df.iloc[i, 3*(j-1):(3*(j-1)+3)].to_list()
+		# Write each end of a breakpoint on its own line, annotated with
+		# (dataframe row number)_(location 1 or 2) e.g. 0_1, 0_2,..,7_1, 7_2,..
+		for loc_i in range(df.shape[0]):
+			# Write location 1 (fields 0:3) and location 2 (fields 3:6)
+			for field_j in range(2):
+				coords = df.iloc[loc_i, 3*field_j:(3*field_j+3)].to_list()
 				out_f.write("\t".join(map(str, coords)))
-				out_f.write("\t{0}_{1}\n".format(i,j))
-
+				out_f.write("\t{0}_{1}\n".format(loc_i,field_j+1))
 
 	# Intersect with all annotation BED files
 	# TODO: update command to change with annotation arguments passed in
-	cmd = ["bedtools", "intersect", "-wa", "-wb", "-a", transloc_tmp_bed, 
-		"-b", gene_bed, promoter_bed, panel_bed,
+	cmd = ["bedtools", "intersect", "-wa", "-wb", "-nonamecheck", 
+		"-a", transloc_tmp_bed, "-b", gene_bed, promoter_bed, panel_bed,
 		literature_bed, "-names"]
 	# Tack on the annotation names to the command
 	cmd = cmd + annotation_types
