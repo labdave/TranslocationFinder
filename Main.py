@@ -1,3 +1,5 @@
+#!/usr/local/bin/python3
+
 # Get discordant reads, identify translocations, and annotate.
 #
 # Rachel Kositsky
