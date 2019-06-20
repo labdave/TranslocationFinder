@@ -29,9 +29,13 @@ def define_defaults(dir_path, args):
 	# 	chromosome_list = os.path.join(dir_path, "resources", 
 	# 		"GRCh38_gencode.txt")
 
-	# If BED file given, use that, otherwise use literature BED file as default. 
+	# If BED file given, use that, otherwise use literature BED file as default.
+	# -1 means no filtering.
 	if args.BED_filter:
-		BED_filter = args.BED_filter
+		if args.BED_filter == "-1":
+			BED_filter = None
+		else:
+			BED_filter = args.BED_filter
 	else:
 		BED_filter = os.path.join(dir_path, "resources", 
 			"both_panels_MYC_BCL2_BCL6.bed")
@@ -50,25 +54,30 @@ def main(args):
 
 	# Call select_discordant_reads. Its output BAM file will be written in the
 	# output directory.
+	print("Extracting discordant reads...")
 	extraction_script = os.path.join(dir_path, "select_discordant_reads.bash")
 	out_bam = os.path.join(out_dir, "discordant_reads.bam")
 	subprocess.call([extraction_script, args.in_bam, out_bam])
 
-	# Call find_translocations. 
+	# Call find_translocations.
+	print("Finding translocations...")
 	BED_filter = define_defaults(dir_path, args)
 	find_translocations.find_translocations(out_bam, out_dir, 
 		BED_filter, args.merge_distance, args.min_read_pairs, 
 		args.min_mapping_quality)
 
 	# Call annotation file. Use files from resources/.
+	print("Annotating translocations...")
 	translocation_tsv = os.path.join(out_dir, "translocations.tsv")
 	gene_bed = os.path.join(dir_path, "resources", "genes.bed")
 	promoter_bed = os.path.join(dir_path, "resources", "promoters.bed")
 	panel_bed = os.path.join(dir_path, "resources", "panel.gencode.bed")
 	literature_bed = os.path.join(dir_path, "resources", "literature.bed")
 
-	annotate_translocations.annotate_translocations(translocation_tsv, 
+	annotate_translocations.annotate_translocations(translocation_tsv,
 		args.out_path, gene_bed, promoter_bed, panel_bed, literature_bed)
+
+	print("Done!")
 
 
 def parse_args(args=None):
@@ -82,9 +91,9 @@ def parse_args(args=None):
 	parser.add_argument("out_path",
 		help="Path to output table with annotated translocations")
 
-	parser.add_argument("-B", "--BED_filter",
-		help="BED file where translocations can be called. "
-		"Default: MYC, BCL2, BCL6, and other genes.",
+	parser.add_argument("-B", "--BED_filter", type=str,
+		help="BED file where translocations can be called, or -1 for no "
+		"filtering. Default: MYC, BCL2, BCL6, and other genes.",
 		default=None)
 
 	parser.add_argument("-D", "--merge_distance", default=1000, type=int,
