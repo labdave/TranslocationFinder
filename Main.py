@@ -4,7 +4,7 @@
 #
 # Rachel Kositsky
 # Created: 2019-06-17
-# Updated: 2019-06-19
+# Updated: 2019-06-20
 
 import annotate_translocations
 import argparse
@@ -67,7 +67,8 @@ def main(args):
 	print("Extracting discordant reads...")
 	extraction_script = os.path.join(dir_path, "select_discordant_reads.bash")
 	out_bam = os.path.join(out_dir, "discordant_reads.bam")
-	subprocess.call([extraction_script, args.in_bam, out_bam])
+	subprocess.call([extraction_script, args.in_bam, out_bam, str(args.nr_cpus),
+		str(args.min_mapping_quality)])
 
 	# Call find_translocations.
 	print("Finding translocations...")
@@ -94,6 +95,10 @@ def parse_args(args=None):
 
 	parser.add_argument("out_path",
 		help="Path to output table with annotated translocations")
+
+	parser.add_argument("--nr_cpus", default=1, type=int,
+		help="Number of CPUs for parallelizing discordant read selection. "
+		"Default: 1")
 
 	parser.add_argument("--BED_filter", type=str,
 		help="BED file where translocations can be called, or -1 for no "
