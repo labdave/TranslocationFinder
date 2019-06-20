@@ -183,11 +183,11 @@ def find_translocations(discordant_reads_bam, out_dir,
 	if BED_filter:
 		# Filter using intersect
 		# run with -nonamecheck to avoid a warning from GL000216.2 chromosome
-		intersect_proc = subprocess.Popen(["bedtools", "intersect", "-a", "-", 
-				"-b", BED_filter, "-nonamecheck"],
-				stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
+		intersect_proc = subprocess.Popen(["bedtools", "intersect",
+			"-a", "-", "-b", BED_filter, "-nonamecheck", "-wa"],
+			stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
 
-		# Got error from bedtools merge about unsorted input, so sort here
+		# Sort before merging
 		sort_proc = subprocess.Popen(["bedtools", "sort", "-i", "-"],
 			stdin=intersect_proc.stdout, stdout=subprocess.PIPE)
 
@@ -319,13 +319,6 @@ def find_translocations(discordant_reads_bam, out_dir,
 					t = Translocation(read, mate)
 					translocation_list.append(t)
 
-			# Check that number of reads you trawled for mates matches bedtools
-			# output
-			if n_mates != loc1.n_reads:
-				raise Exception("Reads fetched in region different from merged "
-					"number of reads: merged {0}, but fetched {1} in region "
-					"{2}".format(loc1.n_reads, n_mates, loc1))
-				
 			# Sort translocation list by chromosome, then by starting position
 			translocation_list = sorted(translocation_list, 
 				key=lambda t: t.start_2)
