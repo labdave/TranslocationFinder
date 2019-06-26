@@ -3,6 +3,7 @@
 #
 # Rachel Kositsky
 # Created: 2019-04-14
+# Updated: 2019-06-26
 
 import argparse
 import os
@@ -106,11 +107,11 @@ class MergedLocation(object):
 		return "{0}:{1}-{2}".format(self.chrom, self.start, self.end)
 
 
-def setup(out_dir, discordant_reads_bam):
+def setup(work_dir, discordant_reads_bam):
 	"""Set up for find_translocations
 
 	Args:
-		out_dir: output directory
+		work_dir: work directory
 		discordant_reads_bam: input BAM file as a pysam object
 	Returns:
 		start_time: the starting time of the program
@@ -120,8 +121,8 @@ def setup(out_dir, discordant_reads_bam):
 	start_time = time.time()
 
 	# Create output directory if it does not exist
-	if not os.path.exists(out_dir):
-		os.mkdir(out_dir)
+	if not os.path.exists(work_dir):
+		os.mkdir(work_dir)
 
 	# Parse in reference contigs (chromosome) ordering from input BAM file
 	header_dict = discordant_reads_bam.header.as_dict()
@@ -135,7 +136,7 @@ def setup(out_dir, discordant_reads_bam):
 	return (start_time, ref_order, ref_key)
 
 
-def find_translocations(discordant_reads_bam, out_dir,
+def find_translocations(discordant_reads_bam, tranlocation_file, work_dir,
 	BED_filter=None, merge_distance=1000, min_read_pairs=2,
 	min_mapping_quality=30):
 	"""Identify translocations given discordant reads,
@@ -146,8 +147,9 @@ def find_translocations(discordant_reads_bam, out_dir,
 	the second location.
 
 	Args:
-	  discordant_reads_bam: BAM file with discordant reads
-	  out_dir: Output directory
+	  discordant_reads_bam: Input BAM file with discordant reads
+	  out_path: Path to write output translocation table
+	  work_dir: Work directory
 	  BED_filter: BED file on which to filter
 	  merge_distance: Maximum distance between reads for which they're still
 	    considered part of the same translocation
@@ -164,7 +166,7 @@ def find_translocations(discordant_reads_bam, out_dir,
 	###########
 
 	bamfile = pysam.AlignmentFile(discordant_reads_bam, "rb")
-	(start_time, ref_order, ref_key) = setup(out_dir, bamfile)
+	(start_time, ref_order, ref_key) = setup(work_dir, bamfile)
 
 	###############################################
 	## Pile up reads to get first breakpoint end ##
@@ -173,7 +175,7 @@ def find_translocations(discordant_reads_bam, out_dir,
 	# Use bedtools merge
 	# Issue: can't merge the mates along with the original guys.
 	# Workaround: just use this for merging R1s, then filter later on R2s
-	merged_file = os.path.join(out_dir, "merged_reads.bed")
+	merged_file = os.path.join(work_dir, "merged_reads.bed")
 
 	# Convert BAM to BED
 	bamtobed_proc = subprocess.Popen(["bedtools", "bamtobed", 
@@ -216,7 +218,7 @@ def find_translocations(discordant_reads_bam, out_dir,
 			stdin=bamtobed_proc.stdout, stdout=subprocess.PIPE)
 
 		# Merge the reads within leeway distance
-		merged_file = os.path.join(out_dir, "merged_reads.bed")
+		merged_file = os.path.join(work_dir, "merged_reads.bed")
 		with open(merged_file, "w") as out_f:
 			merge_proc = subprocess.Popen(["bedtools", "merge", "-i", "-", 
 				"-d", str(merge_distance), "-c", "4",
@@ -235,7 +237,6 @@ def find_translocations(discordant_reads_bam, out_dir,
 	#############################################
 
 	bamfile = pysam.AlignmentFile(discordant_reads_bam, "rb")
-	tranlocation_file = os.path.join(out_dir, "translocations.tsv")
 	n_merged = 0
 	n_written = 0
 
@@ -350,8 +351,11 @@ def parse_args(args=None):
 	parser.add_argument("discordant_reads_bam",
 		help="BAM file with discordant reads")
 
-	parser.add_argument("out_dir",
-		help="Output directory")
+	parser.add_argument("raw_out_path",
+		help="Path to output table with raw translocations")
+
+	parser.add_argument("work_dir",
+		help="Work directory")
 
 	parser.add_argument("-B", "--BED_filter", 
 		help="BED file on which to filter", default=None)
@@ -374,5 +378,6 @@ def parse_args(args=None):
 
 if __name__ == '__main__':
 	a = parse_args(sys.argv[1:])
-	find_translocations(a.discordant_reads_bam, a.out_dir, a.chromosome_list,
-		a.BED_filter, a.merge_distance, a.min_read_pairs, a.min_mapping_quality)
+	find_translocations(a.discordant_reads_bam, a.raw_out_path, a.work_dir,
+		a.BED_filter, a.merge_distance, a.min_read_pairs,
+		a.min_mapping_quality)

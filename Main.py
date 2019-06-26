@@ -53,10 +53,10 @@ def main(args):
 	# Get folder of current executed file to get the repository path
 	dir_path = os.path.dirname(os.path.realpath(__file__))
 
-	# Create temporary output directory
-	out_dir = "translocation_work_dir"
-	if not os.path.exists(out_dir):
-		os.mkdir(out_dir)
+	# Create temporary work directory
+	work_dir = "translocation_work_dir"
+	if not os.path.exists(work_dir):
+		os.mkdir(work_dir)
 
 	# Parse arguments and fill in defaults if needed
 	(BED_filter, gene_bed, promoter_bed,
@@ -66,21 +66,21 @@ def main(args):
 	# output directory.
 	print("Extracting discordant reads...")
 	extraction_script = os.path.join(dir_path, "select_discordant_reads.bash")
-	out_bam = os.path.join(out_dir, "discordant_reads.bam")
+	out_bam = os.path.join(work_dir, "discordant_reads.bam")
 	subprocess.call([extraction_script, args.in_bam, out_bam, str(args.nr_cpus),
 		str(args.min_mapping_quality)])
 
 	# Call find_translocations.
 	print("Finding translocations...")
-	find_translocations.find_translocations(out_bam, out_dir, 
-		BED_filter, args.merge_distance, args.min_read_pairs, 
+	find_translocations.find_translocations(out_bam, args.raw_out_path,
+		work_dir, BED_filter, args.merge_distance, args.min_read_pairs,
 		args.min_mapping_quality)
 
 	# Call annotation file. Use files from resources/ defined earlier.
 	print("Annotating translocations...")
-	translocation_tsv = os.path.join(out_dir, "translocations.tsv")
-	annotate_translocations.annotate_translocations(translocation_tsv,
-		args.out_path, gene_bed, promoter_bed, target_bed, literature_bed)
+	annotate_translocations.annotate_translocations(args.raw_out_path,
+		args.annotated_out_path, gene_bed, promoter_bed, target_bed,
+		literature_bed)
 
 	print("Done!")
 
@@ -93,7 +93,10 @@ def parse_args(args=None):
 
 	parser.add_argument("in_bam", help="Input BAM file")
 
-	parser.add_argument("out_path",
+	parser.add_argument("raw_out_path",
+		help="Path to output table with raw translocations")
+
+	parser.add_argument("annotated_out_path",
 		help="Path to output table with annotated translocations")
 
 	parser.add_argument("--nr_cpus", default=1, type=int,
