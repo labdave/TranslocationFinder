@@ -21,6 +21,12 @@ output=$2
 nr_cpus=$3
 min_mq=$4
 
-samtools view -b -@ ${nr_cpus} -f 1 -F 1038 -q ${min_mq} -o ${output} ${input}
+tmp_output="tmp.bam"
 
+# 1) Extract discordant reads
+samtools view -b -@ ${nr_cpus} -f 1 -F 1038 -q ${min_mq} -o ${tmp_output} ${input}
+samtools index ${tmp_output}
+
+# 2) Remove duplicates. -S: consider paired-end reads as single-end.
+samtools rmdup -S ${tmp_output} ${output}
 samtools index ${output}
